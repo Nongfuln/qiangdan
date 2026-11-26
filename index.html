@@ -252,10 +252,10 @@
         <div class="reg-card" id="regBar" hidden>
           <div class="txt">
             <div class="t">想发布任务？注册高级账户</div>
-            <div class="d">终身有效。提交申请，等任帅民确认开通。</div>
+            <div class="d">终身有效。提交申请，等workteam确认开通。</div>
           </div>
           <button class="btn" id="regOpenBtn" type="button">注册高级账户</button>
-          <div class="none-note" id="regPendingNote" hidden style="width:100%">申请已提交，等待任帅民确认开通。</div>
+          <div class="none-note" id="regPendingNote" hidden style="width:100%">申请已提交，等待workteam确认开通。</div>
         </div>
         <div class="review-card" id="reviewSection" hidden>
           <h3>待审核的高级账户申请</h3>
@@ -341,7 +341,7 @@
     <div class="overlay" id="regOverlay" hidden>
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="regTitle">
         <h2 id="regTitle">注册高级账户</h2>
-        <p>提交申请后，等任帅民确认开通，即可发布任务。</p>
+        <p>提交申请后，等workteam确认开通，即可发布任务。</p>
         <input id="regNameInput" type="text" maxlength="20" placeholder="你的名字" autocomplete="off" />
         <div class="row" style="margin-top:16px">
           <button class="btn btn-secondary" id="regCancelBtn" type="button">取消</button>
@@ -385,7 +385,7 @@
         var myName = '';
         try { myName = (localStorage.getItem(NAME_KEY) || '').trim(); } catch (e) { myName = ''; }
 
-        var PREMIUM_NAMES = ['阎鲲', '任帅民', '何荣臻']; // 种子账户，不用注册缴费
+        var PREMIUM_NAMES = ['阎鲲', '何荣臻', 'workteam']; // 种子账户，不用注册缴费
         var REG_FEE = 49; // 一次性注册费（元），终身有效
         var PAY_QR_SRC = ''; // 预留：收款码图片（base64 data URI），用户以后加缴费方式时填入
         var premiumReqs = [];
@@ -393,7 +393,7 @@
           return premiumReqs.filter(function (r) { return r.status === 'approved'; }).map(function (r) { return r.name; });
         }
         function isPremium() { return PREMIUM_NAMES.indexOf(myName) >= 0 || approvedPremiumNames().indexOf(myName) >= 0; }
-        var APPROVER_NAME = '任帅民'; // 只有此人能确认开通高级账户注册
+        var APPROVER_NAME = 'workteam'; // 只有此人能确认开通高级账户注册
         function isApprover() { return myName === APPROVER_NAME; }
         function myPendingReq() {
           for (var i = 0; i < premiumReqs.length; i++) {
@@ -505,7 +505,7 @@
         /* ---------- 注册高级账户 ---------- */
         function openRegModal() {
           if (isPremium()) { toast('你已经是高级账户了', 'err'); return; }
-          if (myPendingReq()) { toast('申请已提交，等任帅民确认开通', 'err'); return; }
+          if (myPendingReq()) { toast('申请已提交，等workteam确认开通', 'err'); return; }
           $('regNameInput').value = myName;
           $('regOverlay').hidden = false;
           setTimeout(function () { $('regNameInput').focus(); }, 60);
@@ -520,7 +520,7 @@
           sb.from('premium_requests').insert({ name: v, amount: REG_FEE, status: 'pending' }).then(function (res) {
             btn.disabled = false; btn.textContent = '提交注册申请';
             if (res.error) {
-              if (String(res.error.code) === '23505') { toast('这个名字已经提交过申请，等任帅民确认', 'err'); }
+              if (String(res.error.code) === '23505') { toast('这个名字已经提交过申请，等workteam确认', 'err'); }
               else { toast('提交失败：' + res.error.message, 'err'); }
               return;
             }
@@ -530,7 +530,7 @@
               renderName();
             }
             $('regOverlay').hidden = true;
-            toast('已提交，等任帅民确认开通', 'ok');
+            toast('已提交，等workteam确认开通', 'ok');
             loadPremiumReqs();
           });
         }
@@ -794,7 +794,7 @@
           if (dn) { markClaimDone(dn.getAttribute('data-done')); return; }
           var ap = e.target.closest('[data-approve]');
           if (ap) {
-            if (!isApprover()) { toast('只有任帅民能确认开通', 'err'); return; }
+            if (!isApprover()) { toast('只有workteam能确认开通', 'err'); return; }
             var aid = ap.getAttribute('data-approve');
             sb.from('premium_requests').update({ status: 'approved', decided_at: new Date().toISOString(), decided_by: myName }).eq('id', aid).then(function (res) {
               if (res.error) { toast('操作失败：' + res.error.message, 'err'); return; }
@@ -805,7 +805,7 @@
           }
           var rj = e.target.closest('[data-reject]');
           if (rj) {
-            if (!isApprover()) { toast('只有任帅民能驳回申请', 'err'); return; }
+            if (!isApprover()) { toast('只有workteam能驳回申请', 'err'); return; }
             var rid = rj.getAttribute('data-reject');
             askConfirm('驳回这条申请？', '驳回后对方可以重新提交申请。', '驳回申请', function () {
               sb.from('premium_requests').update({ status: 'rejected', decided_at: new Date().toISOString(), decided_by: myName }).eq('id', rid).then(function (res) {
