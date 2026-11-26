@@ -129,6 +129,19 @@
       .tag-offline { font-size: 12px; color: var(--ink-3); border: 1px dashed var(--line); padding: 2px 8px; border-radius: 999px; }
       .prem-badge { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--amber-soft); color: var(--amber); line-height: 1.5; white-space: nowrap; }
       .export-bar { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+      .reg-card { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin-top: 14px; }
+      .reg-card .txt { flex: 1; min-width: 200px; }
+      .reg-card .t { font-weight: 700; }
+      .reg-card .d { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+      .review-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin-top: 14px; }
+      .review-card h3 { margin: 0 0 4px; font-size: 15px; }
+      .review-item { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; flex-wrap: wrap; }
+      .review-item:first-of-type { border-top: 0; }
+      .review-item .nm { font-weight: 700; flex: 1; }
+      .review-item .tm { font-size: 12px; color: var(--ink-3); }
+      .qr-img { display: block; width: 200px; height: 200px; margin: 12px auto; border: 1px solid var(--line); border-radius: 10px; }
+      .qr-amount { text-align: center; font-size: 22px; font-weight: 800; color: var(--accent); }
+      .qr-note { text-align: center; font-size: 13px; color: var(--ink-2); margin-top: 4px; }
       .card-foot .spacer { flex: 1; }
       .btn {
         border: 0; border-radius: 10px; padding: 0 20px; font-weight: 700; font-size: 15px;
@@ -236,6 +249,18 @@
           <button class="btn btn-secondary btn-sm" id="exportTasksBtn" type="button">导出任务清单 CSV</button>
           <button class="btn btn-secondary btn-sm" id="exportClaimsBtn" type="button">导出抢单记录 CSV</button>
         </div>
+        <div class="reg-card" id="regBar" hidden>
+          <div class="txt">
+            <div class="t">想发布任务？注册高级账户</div>
+            <div class="d">终身有效。提交申请，等高级账户确认开通。</div>
+          </div>
+          <button class="btn" id="regOpenBtn" type="button">注册高级账户</button>
+          <div class="none-note" id="regPendingNote" hidden style="width:100%">申请已提交，等待高级账户确认开通。</div>
+        </div>
+        <div class="review-card" id="reviewSection" hidden>
+          <h3>待审核的高级账户申请</h3>
+          <div id="reviewList"></div>
+        </div>
         <div id="hallState" class="state-msg">正在加载任务…</div>
         <div id="hallList" class="list"></div>
         <div id="hallEmpty" class="empty" hidden>
@@ -312,6 +337,19 @@
       </div>
     </div>
 
+    <!-- 注册高级账户 -->
+    <div class="overlay" id="regOverlay" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="regTitle">
+        <h2 id="regTitle">注册高级账户</h2>
+        <p>提交申请后，等高级账户确认开通，即可发布任务。</p>
+        <input id="regNameInput" type="text" maxlength="20" placeholder="你的名字" autocomplete="off" />
+        <div class="row" style="margin-top:16px">
+          <button class="btn btn-secondary" id="regCancelBtn" type="button">取消</button>
+          <button class="btn" id="regSubmitBtn" type="button">提交注册申请</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 确认弹窗 -->
     <div class="overlay" id="confirmOverlay" hidden>
       <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="confirmText">
@@ -347,8 +385,20 @@
         var myName = '';
         try { myName = (localStorage.getItem(NAME_KEY) || '').trim(); } catch (e) { myName = ''; }
 
-        var PREMIUM_NAMES = ['阎鲲', '任帅民', '何荣臻'];
-        function isPremium() { return PREMIUM_NAMES.indexOf(myName) >= 0; }
+        var PREMIUM_NAMES = ['阎鲲', '任帅民', '何荣臻']; // 种子账户，不用注册缴费
+        var REG_FEE = 49; // 一次性注册费（元），终身有效
+        var PAY_QR_SRC = ''; // 预留：收款码图片（base64 data URI），用户以后加缴费方式时填入
+        var premiumReqs = [];
+        function approvedPremiumNames() {
+          return premiumReqs.filter(function (r) { return r.status === 'approved'; }).map(function (r) { return r.name; });
+        }
+        function isPremium() { return PREMIUM_NAMES.indexOf(myName) >= 0 || approvedPremiumNames().indexOf(myName) >= 0; }
+        function myPendingReq() {
+          for (var i = 0; i < premiumReqs.length; i++) {
+            if (premiumReqs[i].status === 'pending' && premiumReqs[i].name === myName) return premiumReqs[i];
+          }
+          return null;
+        }
 
         var tasks = [];
         var claims = [];
@@ -421,6 +471,11 @@
             : '只有高级账户能发布任务，你可以在大厅里抢单。';
           if (currentView === 'publish' && !prem) switchView('hall');
           if (currentView === 'publish') $('fPublisher').value = myName;
+          var pend = myPendingReq();
+          $('regBar').hidden = prem;
+          $('regOpenBtn').hidden = !!pend;
+          $('regPendingNote').hidden = !pend;
+          $('reviewSection').hidden = !prem;
         }
         function openNameModal(canCancel) {
           $('nameInput').value = canCancel ? myName : '';
@@ -444,6 +499,42 @@
         $('nameInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') saveName(); });
         $('nameCancelBtn').addEventListener('click', function () { $('nameOverlay').hidden = true; });
         $('renameBtn').addEventListener('click', function () { openNameModal(true); });
+
+        /* ---------- 注册高级账户 ---------- */
+        function openRegModal() {
+          if (isPremium()) { toast('你已经是高级账户了', 'err'); return; }
+          if (myPendingReq()) { toast('申请已提交，等高级账户确认开通', 'err'); return; }
+          $('regNameInput').value = myName;
+          $('regOverlay').hidden = false;
+          setTimeout(function () { $('regNameInput').focus(); }, 60);
+        }
+        function submitReg() {
+          var v = $('regNameInput').value.trim();
+          if (!v) { toast('先填个名字吧', 'err'); return; }
+          if (!sb) { toast('连接后台失败，请刷新重试', 'err'); return; }
+          if (PREMIUM_NAMES.indexOf(v) >= 0 || approvedPremiumNames().indexOf(v) >= 0) { toast('这个名字已经是高级账户了', 'err'); return; }
+          var btn = $('regSubmitBtn');
+          btn.disabled = true; btn.textContent = '提交中…';
+          sb.from('premium_requests').insert({ name: v, amount: REG_FEE, status: 'pending' }).then(function (res) {
+            btn.disabled = false; btn.textContent = '提交注册申请';
+            if (res.error) {
+              if (String(res.error.code) === '23505') { toast('这个名字已经提交过申请，等高级账户确认', 'err'); }
+              else { toast('提交失败：' + res.error.message, 'err'); }
+              return;
+            }
+            if (v !== myName) {
+              myName = v;
+              try { localStorage.setItem(NAME_KEY, v); } catch (err) {}
+              renderName();
+            }
+            $('regOverlay').hidden = true;
+            toast('已提交，等高级账户确认开通', 'ok');
+            loadPremiumReqs();
+          });
+        }
+        $('regOpenBtn').addEventListener('click', openRegModal);
+        $('regCancelBtn').addEventListener('click', function () { $('regOverlay').hidden = true; });
+        $('regSubmitBtn').addEventListener('click', submitReg);
 
         /* ---------- data ---------- */
         function claimsOf(taskId) {
@@ -473,12 +564,22 @@
             claims = cRes.data || [];
             firstLoadDone = true;
             renderAll();
+            loadPremiumReqs();
           }).catch(function (e) {
             if (!firstLoadDone && !silent) {
               $('hallState').textContent = '加载失败：' + (e.message || '网络异常') + '，请刷新重试。';
               $('hallState').className = 'state-msg err';
             }
           });
+        }
+
+        function loadPremiumReqs() {
+          if (!sb) return;
+          sb.from('premium_requests').select('*').order('created_at', { ascending: false }).then(function (res) {
+            if (res.error) return; // 表还没建好时不报错、不影响大厅
+            premiumReqs = res.data || [];
+            renderAll();
+          }).catch(function () {});
         }
 
         /* ---------- rendering ---------- */
@@ -608,6 +709,24 @@
           renderName();
           renderHall();
           renderMine();
+          renderReview();
+        }
+
+        function renderReview() {
+          if (!isPremium()) return;
+          var pend = premiumReqs.filter(function (r) { return r.status === 'pending'; });
+          var box = $('reviewList');
+          if (pend.length === 0) {
+            box.innerHTML = '<div class="none-note">暂无待审核的申请</div>';
+            return;
+          }
+          box.innerHTML = pend.map(function (r) {
+            return '<div class="review-item"><span class="nm">' + esc(r.name) + '</span>' +
+              '<span>¥' + esc(fmtMoney(r.amount)) + '</span>' +
+              '<span class="tm">' + esc(fmtTime(r.created_at)) + '</span>' +
+              '<button class="btn btn-green btn-sm" data-approve="' + esc(r.id) + '">确认开通</button>' +
+              '<button class="btn btn-secondary btn-sm" data-reject="' + esc(r.id) + '">驳回</button></div>';
+          }).join('');
         }
 
         /* ---------- actions ---------- */
@@ -671,6 +790,28 @@
           }
           var dn = e.target.closest('[data-done]');
           if (dn) { markClaimDone(dn.getAttribute('data-done')); return; }
+          var ap = e.target.closest('[data-approve]');
+          if (ap) {
+            var aid = ap.getAttribute('data-approve');
+            sb.from('premium_requests').update({ status: 'approved', decided_at: new Date().toISOString(), decided_by: myName }).eq('id', aid).then(function (res) {
+              if (res.error) { toast('操作失败：' + res.error.message, 'err'); return; }
+              toast('已开通高级账户', 'ok');
+              loadPremiumReqs();
+            });
+            return;
+          }
+          var rj = e.target.closest('[data-reject]');
+          if (rj) {
+            var rid = rj.getAttribute('data-reject');
+            askConfirm('驳回这条申请？', '驳回后对方可以重新提交申请。', '驳回申请', function () {
+              sb.from('premium_requests').update({ status: 'rejected', decided_at: new Date().toISOString(), decided_by: myName }).eq('id', rid).then(function (res) {
+                if (res.error) { toast('操作失败：' + res.error.message, 'err'); return; }
+                toast('已驳回', 'ok');
+                loadPremiumReqs();
+              });
+            });
+            return;
+          }
         });
 
         /* ---------- export (高级账户) ---------- */
